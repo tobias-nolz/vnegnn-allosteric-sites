@@ -1,5 +1,6 @@
 from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from tqdm import tqdm
 import os
 import re
@@ -14,7 +15,7 @@ def normalize_pdb_tokens(pbd_id: str) -> list[str]:
     - Single ID: "1ABC"
     - Multiple IDs: "1ABC; 2DEF"
     - IDs with chain: "1ABC_A"
-    :param cell: cell value from the PDB ID column
+    :param: PDB_ID to normalize
     :return: normalized PDB IDs
     """
     s = pbd_id.strip()
@@ -35,7 +36,7 @@ def normalize_pdb_tokens(pbd_id: str) -> list[str]:
 
 def download_single(
         pdb_id: str,
-        out_dir: str,
+        out_dir: Path,
         max_retries=3,
         timeout=25) -> tuple[str, str, str | None]:
     """
@@ -45,15 +46,17 @@ def download_single(
     :param out_dir: Directory to save PDB files
     :param max_retries: Maximum number of retries on failure
     :param timeout: Request timeout in seconds
-    :return: (pdb_id, status, file_path or None)
+    :return: Tuple of (pdb_id, status, file_path or None)
         status: "downloaded", "exists", "not_found"
         file_path: path to saved file or None if not downloaded
     """
     pdb_id_up = pdb_id.upper()
-    out_pdb = os.path.join(out_dir, f"{pdb_id_up}.pdb")
-
-    if os.path.exists(out_pdb):
+    out_dir = os.path.join(out_dir, f"{pdb_id_up}")
+    if os.path.exists(out_dir):
         return pdb_id_up, "exists", None
+
+    os.makedirs(out_dir, exist_ok=True)
+    out_pdb = os.path.join(out_dir, "protein.pdb")
 
     url = f"https://files.rcsb.org/download/{pdb_id_up}.pdb"
     attempt = 0
@@ -62,9 +65,9 @@ def download_single(
         try:
             r = requests.get(url, timeout=timeout)
             if r.status_code == 200 and r.content and len(r.content) > 100:
-                with open(out_dir, "wb") as fh:
+                with open(out_pdb, "wb") as fh:
                     fh.write(r.content)
-                return pdb_id_up, "downloaded", out_dir
+                return pdb_id_up, "downloaded", out_pdb
             else:
                 # 404 or small content -> return not found
                 return pdb_id_up, "not_found", None
@@ -76,11 +79,11 @@ def download_single(
 
 
 def prepare_pdb_directory(
-        pdb_dir: str,
+        pdb_dir: Path,
         pdb_ids: list[str],
         clear_existing: bool = False,
         workers: int = 8,
-        print_summary: str = True) -> None:
+        print_summary: bool = True) -> None:
     """
     Prepare a directory with PDB files for the given PDB IDs.
     Downloads files in parallel using multiple threads.
@@ -95,35 +98,42 @@ def prepare_pdb_directory(
     os.makedirs(pdb_dir, exist_ok=True)
 
     if clear_existing:
-        existing_files = os.listdir(pdb_dir)
-        for f in existing_files:
-            if f.endswith(".pdb"):
-                os.remove(os.path.join(pdb_dir, f))
+        for root, _, files in os.walk(pdb_dir):
+            for file in files:
+                if file.endswith(".pdb"):
+                    os.remove(os.path.join(root, file))
 
-    results = []
-    with ThreadPoolExecutor(max_workers=workers) as ex:
-        futures = {ex.submit(download_single, pid, pdb_dir): pid for pid in pdb_ids}
-        iterator = as_completed(futures)
-        if print_summary:
-            iterator = tqdm(iterator, total=len(futures), desc="Downloading", unit="pdb")
-        for fut in iterator:
-            pid = futures[fut]
-            try:
-                res = fut.result()
-                results.append(res)
-                status = res[1]
-                if status == "not_found":
-                    print(f"[MISS] {pid} not found on RCSB")
-            except Exception as e:
-                print(f"[ERR] {pid} -> {e}")
-
+    tqdm.write(f"[INFO] Starting download of {len(pdb_ids)} PDB files to {pdb_dir} using {workers} workers...")
     counts = {"downloaded": 0, "exists": 0, "not_found": 0}
-    for _id, status, _path in results:
-        counts[status] = counts.get(status, 0) + 1
-    print("=== PDB processing summary ===")
-    print(f"Downloaded: {counts.get('downloaded', 0)}")
-    print(f"Already existed: {counts.get('exists', 0)}")
-    print(f"Not found (404/empty): {counts.get('not_found', 0)}")
-    print(f"Saved to: {os.path.abspath(pdb_dir)}")
-    print("==============================")
-    return None
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = {
+            ex.submit(
+                download_single,
+                pid,
+                pdb_dir
+            ): pid
+            for pid in pdb_ids
+        }
+
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Downloading PDB files", unit="pdb"):
+            pid = futures[future]
+            try:
+                _, status, _ = future.result()
+                counts[status] += 1
+                if status == "not_found":
+                    tqdm.write(f"[WARNING] {pid} not found on RCSB")
+            except Exception as e:
+                tqdm.write(f"[ERROR] {pid} -> {e}")
+
+    tqdm.write("[INFO] PDB download complete.")
+    if print_summary:
+        tqdm.write(f"""
+=== PDB processing summary ===
+Downloaded: {counts.get('downloaded', 0)}
+Already existed: {counts.get('exists', 0)}
+Not found (404/empty): {counts.get('not_found', 0)}
+Saved to: {os.path.abspath(pdb_dir)}
+==============================
+""")
+    return
