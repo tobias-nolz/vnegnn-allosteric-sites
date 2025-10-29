@@ -22,43 +22,55 @@ class LigandSelect(Select):
 def extract_single_ligand(
         pdb_dir: Path,
         pdb_id: str,
-        chain_id: str,
-        residue_id: str,
-        check_existing: bool = True
-) -> tuple[str, Path]:
+        chain_ids: str,
+        residue_ids: str,
+        skip_existing: bool = True
+) -> list[tuple[str, Path]]:
     """
     Extract a single ligand from a PDB file and save it.
     :param pdb_dir: Directory containing the PDB files
     :param pdb_id: PDB ID of the protein
-    :param chain_id: Chain ID of the ligand
-    :param residue_id: Residue ID of the ligand
-    :param check_existing: If False, skip extraction if ligand file already exists
-    :return: Tuple of (status, ligand_out_file)
+    :param chain_ids: Chain IDs of the ligand
+    :param residue_ids: Residue IDs of the ligand
+    :param skip_existing: If True, skip extraction if ligand file already exists
+    :return: List of tuples[status, ligand_out_file]
         status: "extracted", "skipped", or "missing"
-        ligand_out_file: Path to the saved ligand file
+        ligand_out_file: Path to the extracted ligand file
     """
     protein_dir = pdb_dir / f"{pdb_id}"
     pdb_file = protein_dir / "protein.pdb"
-    ligand_out_file = protein_dir / f"ligand_{chain_id}.pdb"
 
     if not pdb_file.exists():
-        return "missing", pdb_file
+        return [("missing", pdb_file)]
 
-    if not check_existing and ligand_out_file.exists():
-        return "skipped", ligand_out_file
+    chain_ids = chain_ids.split(";")
+    residue_ids = residue_ids.split(";")
 
-    parser = PDBParser(QUIET=True, PERMISSIVE=True)
-    io = PDBIO()
-    structure = parser.get_structure(pdb_id, pdb_file)
-    io.set_structure(structure)
-    io.save(str(ligand_out_file), LigandSelect(chain_id, residue_id))
-    return "extracted", ligand_out_file
+    if len(chain_ids) != len(residue_ids):
+        raise ValueError(f"Number of chain IDs and residue IDs do not match for PDB ID {pdb_id}")
+
+    results = []
+    for i, (chain_id, residue_ids) in enumerate(zip(chain_ids, residue_ids)):
+        ligand_out_file = protein_dir / f"ligand_{i}.pdb"
+
+        if skip_existing and ligand_out_file.exists():
+            results.append(("skipped", ligand_out_file))
+            continue
+
+        parser = PDBParser(QUIET=True, PERMISSIVE=True)
+        io = PDBIO()
+        structure = parser.get_structure(pdb_id, pdb_file)
+        io.set_structure(structure)
+        io.save(str(ligand_out_file), LigandSelect(chain_id, residue_ids))
+        results.append(("extracted", ligand_out_file))
+
+    return results
 
 
 def prepare_ligands_from_asd(
         pdb_dir: Path,
         ligand_info: pd.DataFrame,
-        check_existing: bool = False,
+        skip_existing: bool = True,
         workers: int = 8,
         print_summary: bool = True
 ) -> None:
@@ -66,7 +78,7 @@ def prepare_ligands_from_asd(
     Save ligand structures from ASD dataset PDB files.
     :param pdb_dir: Directory containing PDB files organized by PDB ID
     :param ligand_info: DataFrame with columns ['pdb_id', 'ligand_chain', 'ligand_residue']
-    :param check_existing: If True, skip extraction if ligand file already exists
+    :param skip_existing: If True, skip extraction if ligand file already exists
     :param workers: Number of parallel workers (not used in this implementation)
     :param print_summary: If True, print a summary of extraction results
     :return: None
@@ -82,7 +94,7 @@ def prepare_ligands_from_asd(
                 row['pdb_id'],
                 row['ligand_chain'],
                 row['ligand_residue'],
-                check_existing
+                skip_existing
             ): (row['pdb_id'], row['ligand_chain'])
             for _, row in ligand_info.iterrows()
         }
@@ -90,8 +102,9 @@ def prepare_ligands_from_asd(
         for future in tqdm(as_completed(futures), total=len(futures), desc="Extracting ligands"):
             pdb_id, chain_id = futures[future]
             try:
-                status, _ = future.result()
-                counts[status] += 1
+                results = future.result()
+                for status, _ in results:
+                    counts[status] += 1
                 if status == "missing":
                     tqdm.write(f"[WARNING] PDB file missing for {pdb_id}")
             except Exception as e:
