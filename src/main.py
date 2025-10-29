@@ -64,11 +64,11 @@ def setup_data(
 
 if __name__ == "__main__":
     DATA_DIR = Path(os.path.join("..", "data"))
-    PDB_DIR = Path(os.path.join(DATA_DIR, "PDB"))
-    PRED_DIR = Path(os.path.join(DATA_DIR, "predictions"))
+    PDB_DIR = DATA_DIR / "PDB"
+    PRED_DIR = DATA_DIR / "predictions"
 
-    ASD_DIR = Path(os.path.join(DATA_DIR, "ASD dataset"))
-    ASD_FILE = Path(os.path.join(ASD_DIR, "ASD_Release_202309_AS.txt"))
+    ASD_DIR = DATA_DIR / "ASD dataset"
+    ASD_FILE = ASD_DIR / "ASD_Release_202309_AS.txt"
 
     VNEGNN_PATH = ...
     MSMS_PATH = ...
