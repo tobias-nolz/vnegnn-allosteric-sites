@@ -74,11 +74,10 @@ if __name__ == "__main__":
     MSMS_PATH = ...
 
     asd_dataset = pd.read_csv(ASD_FILE, sep="\t")
-    asd_dataset = asd_dataset.sample(n=8, random_state=42).reset_index(drop=True)
 
     setup_data(
         pdb_dir=PDB_DIR,
-        asd_dataset=asd_dataset.iloc[:32],
+        asd_dataset=asd_dataset,
         vnegnn_path=VNEGNN_PATH,
         msms_path=MSMS_PATH
     )
