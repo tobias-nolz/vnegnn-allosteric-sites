@@ -78,7 +78,7 @@ def main():
     print(f"Using device: {device}")
 
     print("\n" + "=" * 60)
-    print(f"Processing dataset: {data_root} — raw folder: {data_root}")
+    print(f"Processing dataset: {data_root}")
     print("=" * 60)
 
     print("Generating ESM embeddings...")

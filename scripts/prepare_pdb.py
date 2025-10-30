@@ -82,7 +82,7 @@ def prepare_pdb_directory(
         pdb_dir: Path,
         pdb_ids: list[str],
         clear_existing: bool = False,
-        workers: int = 8,
+        n_jobs: int = 8,
         print_summary: bool = True) -> None:
     """
     Prepare a directory with PDB files for the given PDB IDs.
@@ -90,7 +90,7 @@ def prepare_pdb_directory(
     :param pdb_dir: Directory to save PDB files
     :param pdb_ids: List of raw PDB ID strings (may contain multiple IDs per entry)
     :param clear_existing: If True, clear existing PDB files in the directory before downloading
-    :param workers: Number of parallel download threads
+    :param n_jobs: Number of parallel download threads
     :param print_summary: If True, print a summary of download results
     :return: None
     """
@@ -103,10 +103,10 @@ def prepare_pdb_directory(
                 if file.endswith(".pdb"):
                     os.remove(os.path.join(root, file))
 
-    tqdm.write(f"[INFO] Starting download of {len(pdb_ids)} PDB files to {pdb_dir} using {workers} workers...")
+    tqdm.write(f"[INFO] Starting download of {len(pdb_ids)} PDB files to {pdb_dir} using {n_jobs} workers...")
     counts = {"downloaded": 0, "exists": 0, "not_found": 0}
 
-    with ThreadPoolExecutor(max_workers=workers) as ex:
+    with ThreadPoolExecutor(max_workers=n_jobs) as ex:
         futures = {
             ex.submit(
                 download_single,
