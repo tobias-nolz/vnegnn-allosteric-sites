@@ -1,10 +1,15 @@
+#!/usr/bin/env python3
+"""
+Setup data for VN-EGNN allosteric site prediction.
+This includes downloading PDB files and extracting ligand information.
+"""
 import pandas as pd
 from pathlib import Path
 
 from prepare_pdb import prepare_pdb_directory
 from prepare_ligand import prepare_ligands_from_asd
 from tqdm import tqdm
-import argparse
+import click
 
 
 def setup_data(
@@ -69,52 +74,46 @@ def _read_asd_dataset(path: Path) -> pd.DataFrame:
     return pd.read_csv(path, sep=None, engine='python')
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser(
-        description="Setup VN-EGNN data: download PDBs and extract ligands from ASD dataset"
-    )
-    parser.add_argument(
-        "--output-dir",
-        "-o",
-        required=True,
-        help="Directory where PDB folders will be stored (one folder per PDB)"
-    )
-    parser.add_argument(
-        "--asd-file",
-        "-a",
-        required=True,
-        help="Path to ASD dataset file (CSV/TSV) containing columns 'allosteric_pdb','modulator_chain','modulator_resi'"
-    )
-    parser.add_argument(
-        "--jobs",
-        "-j",
-        type=int,
-        default=1,
-        help="Number of parallel workers"
-    )
-    parser.add_argument(
-        "--no-skip",
-        action='store_true',
-        help="Do not skip existing extracted ligand files"
-    )
-
-    args = parser.parse_args(argv)
-
-    output_dir = Path(args.output_dir)
-    asd_file = Path(args.asd_file)
-    workers = args.workers
-    skip_existing = not args.no_skip
-
+@click.command()
+@click.option(
+    "--output-dir",
+    "-o",
+    required=True,
+    type=click.Path(),
+    help="Directory where PDB folders will be stored (one folder per PDB)"
+)
+@click.option(
+    "--asd-file",
+    "-a",
+    required=True,
+    type=click.Path(),
+    help=("Path to ASD dataset file (CSV/TSV) containing columns 'allosteric_pdb','modulator_chain','modulator_resi'")
+)
+@click.option(
+    "--jobs",
+    "-j",
+    default=1,
+    type=int,
+    help="Number of parallel workers"
+)
+@click.option(
+    "--no-skip",
+    is_flag=True,
+    default=False,
+    help="Do not skip existing extracted ligand files"
+)
+def main(output_dir: str, asd_file: str, jobs: int, no_skip: bool):
     print(f"Loading ASD dataset from: {asd_file}")
     asd_df = _read_asd_dataset(asd_file)
 
+    output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     setup_data(
         output_dir=output_dir,
         asd_dataset=asd_df,
-        n_jobs=workers,
-        skip_existing=skip_existing
+        n_jobs=jobs,
+        skip_existing=not no_skip
     )
 
 
