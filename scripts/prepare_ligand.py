@@ -43,8 +43,8 @@ def extract_single_ligand(
     if not pdb_file.exists():
         return [("missing", pdb_file)]
 
-    chain_ids = chain_ids.split(";")
-    residue_ids = residue_ids.split(";")
+    chain_ids = str(chain_ids).split(";")
+    residue_ids = str(residue_ids).split(";")
 
     if len(chain_ids) != len(residue_ids):
         raise ValueError(f"Number of chain IDs and residue IDs do not match for PDB ID {pdb_id}")

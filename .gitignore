@@ -21,3 +21,9 @@ venv/
 
 # Test files
 old
+
+# wandb
+wandb/
+
+# Nextcloud sync exclude
+.sync-exclude.lst
