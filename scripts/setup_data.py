@@ -8,9 +8,9 @@ import argparse
 
 
 def setup_data(
-        pdb_dir: Path,
+        output_dir: Path,
         asd_dataset: pd.DataFrame,
-        workers: int,
+        n_jobs: int,
         skip_existing: bool = False,
 ) -> None:
     """
@@ -20,13 +20,13 @@ def setup_data(
       - download PDB files into `pdb_dir` (one folder per PDB with `protein.pdb` inside)
       - extract ligand PDBs from the downloaded protein files
 
-    :param pdb_dir: Path to the directory where PDB files will be stored.
+    :param output_dir: Path to the directory where PDB files will be stored.
     :param asd_dataset: DataFrame containing ASD dataset information.
-    :param workers: Number of parallel workers for downloads/extraction.
+    :param n_jobs: Number of parallel workers for downloads/extraction.
     :param skip_existing: If True, skip creating files that already exist.
     :return: None
     """
-    pdb_dir = Path(pdb_dir)
+    output_dir = Path(output_dir)
 
     if asd_dataset is None or asd_dataset.empty:
         raise ValueError("ASD dataset is empty or not provided")
@@ -36,11 +36,11 @@ def setup_data(
         raise KeyError("ASD dataset must contain column 'allosteric_pdb'")
 
     pdb_ids = asd_dataset['allosteric_pdb'].tolist()
-    tqdm.write(f"Preparing PDB directory at {pdb_dir} with {len(pdb_ids)} PDBs (workers={workers})")
+    tqdm.write(f"Preparing PDB directory at {output_dir} with {len(pdb_ids)} PDBs (workers={n_jobs})")
     prepare_pdb_directory(
-        pdb_dir=pdb_dir,
+        pdb_dir=output_dir,
         pdb_ids=pdb_ids,
-        workers=workers
+        n_jobs=n_jobs
     )
 
     if not {'modulator_chain', 'modulator_resi'}.issubset(asd_dataset.columns):
@@ -53,12 +53,12 @@ def setup_data(
             'ligand_residue': asd_dataset['modulator_resi'],
         }
     )
-    tqdm.write(f"Extracting ligands (skip_existing={skip_existing}, workers={workers})")
+    tqdm.write(f"Extracting ligands (skip_existing={skip_existing}, workers={n_jobs})")
     prepare_ligands_from_asd(
-        pdb_dir=pdb_dir,
+        pdb_dir=output_dir,
         ligand_info=ligand_info,
         skip_existing=skip_existing,
-        workers=workers
+        workers=n_jobs
     )
 
 
@@ -74,8 +74,8 @@ def main(argv=None):
         description="Setup VN-EGNN data: download PDBs and extract ligands from ASD dataset"
     )
     parser.add_argument(
-        "--data-dir",
-        "-ü",
+        "--output-dir",
+        "-o",
         required=True,
         help="Directory where PDB folders will be stored (one folder per PDB)"
     )
@@ -86,7 +86,7 @@ def main(argv=None):
         help="Path to ASD dataset file (CSV/TSV) containing columns 'allosteric_pdb','modulator_chain','modulator_resi'"
     )
     parser.add_argument(
-        "--workers",
+        "--jobs",
         "-j",
         type=int,
         default=16,
@@ -100,7 +100,7 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
 
-    data_dir = Path(args.data_dir)
+    output_dir = Path(args.output_dir)
     asd_file = Path(args.asd_file)
     workers = args.workers
     skip_existing = not args.no_skip
@@ -108,12 +108,12 @@ def main(argv=None):
     print(f"Loading ASD dataset from: {asd_file}")
     asd_df = _read_asd_dataset(asd_file)
 
-    data_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     setup_data(
-        pdb_dir=data_dir,
+        output_dir=output_dir,
         asd_dataset=asd_df,
-        workers=workers,
+        n_jobs=workers,
         skip_existing=skip_existing
     )
 
