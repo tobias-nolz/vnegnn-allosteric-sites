@@ -1,3 +1,4 @@
 [submodule "vnegnn"]
 	path = vnegnn
 	url = https://github.com/tobias-nolz/vnegnn
+	branch = master
